@@ -266,6 +266,7 @@ class contentExtensionImportcsvIndex extends AdministrationPage
             {
                 // Start by creating a new entry:
                 $entry = new Entry($this);
+                $entry->set('author_id', Administration::instance()->Author->get('id'));
                 $entry->set('section_id', $sectionID);
 
                 // Ignore this entry?
@@ -316,27 +317,62 @@ class contentExtensionImportcsvIndex extends AdministrationPage
 
                     if (!$ignore) {
                         // Do the actual importing:
+                        $processMap = false;
+                        $mapArray = array();
                         $j = 0;
-                        foreach ($row as $value)
+                        foreach ($row as $key => $value)
                         {
                             // When no unique field is found, treat it like a new entry
                             // Otherwise, stop processing to safe CPU power.
                             $fieldID = intval($fieldIDs[$j]);
                             // If $fieldID = 0, then `Don't use` is selected as field. So don't use it! :-P
                             if ($fieldID != 0) {
+
+                                // this needs to be reset on every go around
+                                // otherwise 1:1 fields will not import correctly
+                                $isMultiFieldImport = false;
+                                $processFlag = '';
+
                                 $field = $fm->fetch($fieldID);
                                 // Get the corresponding field-type:
                                 $type = $field->get('type');
                                 if (isset($drivers[$type])) {
-                                    $drivers[$type]->setField($field);
-                                    $data = $drivers[$type]->import($value, $entryID);
+                                    $driver = $drivers[$type];
+                                    $driver->setField($field);
+
+                                    if (method_exists($driver, 'getKeyMappings')) {
+                                        // only set this when getting key mappings
+                                        if (method_exists($driver, 'isMultiFieldImport')) {
+                                            $isMultiFieldImport = $driver->isMultiFieldImport();
+                                        }
+                                        if (method_exists($driver, 'processFlag')) {
+                                            $processFlag = $driver->processFlag();
+                                        }
+                                        // for some reason, this is necessary even though it is called previously
+                                        if (!$entryID) {
+                                            $driver->setField($field);
+                                            $entryID = $driver->scanDatabase($row[$csvTitles[$uniqueField]]);
+                                        }
+                                        $realKey = $driver->getKeyMappings($key);
+                                        $mapArray[$realKey] = $value;
+                                        $data = $driver->import($mapArray, $entryID);
+                                    } else {
+                                        $data = $driver->import($value, $entryID);
+                                    }
                                 } else {
                                     $drivers['default']->setField($field);
                                     $data = $drivers['default']->import($value, $entryID);
                                 }
                                 // Set the data:
                                 if ($data != false) {
-                                    $entry->setData($fieldID, $data);
+                                    if (!$isMultiFieldImport) {
+                                        // $data will have a value at this point if it's not a multi field import
+                                        $entry->setData($fieldID, $data);
+                                    } elseif ($data[$processFlag]) {
+                                        // this should basically be TRUE
+                                        unset($data[$processFlag]);
+                                        $entry->setData($fieldID, $data);
+                                    }
                                 }
                             }
                             $j++;
