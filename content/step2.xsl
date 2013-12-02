@@ -56,7 +56,9 @@
             </p>
             <label>With unique fields:
                 <select name="unique-action" class="small">
+                    <!--<option value="default">Add new entry anyway (default)</option>-->
                     <option value="update">Update existing value</option>
+                    <option value="ignore">Do nothing</option>
                 </select>
             </label>
             <input type="hidden" name="section" value="{data/@section-id}"/>
