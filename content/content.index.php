@@ -18,6 +18,7 @@ class contentExtensionImportcsvIndex extends AdministrationPage
     }
 */
 
+    private static $IS_DEVELOPER;
 
     public function build()
     {
@@ -32,6 +33,7 @@ class contentExtensionImportcsvIndex extends AdministrationPage
 
     public function view()
     {
+        self::$IS_DEVELOPER = Administration::instance()->Author->isDeveloper();
         if (isset($_POST['import-step-2']) && $_FILES['csv-file']['name'] != '') {
             // Import step 2:
             $this->__importStep2Page();
@@ -64,9 +66,17 @@ class contentExtensionImportcsvIndex extends AdministrationPage
         $sectionsNode = new XMLElement('sections');
         $sm = new SectionManager($this);
         $sections = $sm->fetch();
+        $nonDeveloperChoices = array('stores');
         foreach ($sections as $section)
         {
-            $sectionsNode->appendChild(new XMLElement('section', $section->get('name'), array('id' => $section->get('id'))));
+            $name = $section->get('name');
+            if (self::$IS_DEVELOPER) {
+                // show all possible choices from dropdown menu
+                $sectionsNode->appendChild(new XMLElement('section', $name, array('id' => $section->get('id'))));
+            } elseif (in_array(strtolower($name), $nonDeveloperChoices)) {
+                // only show allowed/certain choices
+                $sectionsNode->appendChild(new XMLElement('section', $name, array('id' => $section->get('id'))));
+            }
         }
         $xml->appendChild($sectionsNode);
 

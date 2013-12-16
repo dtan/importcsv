@@ -18,8 +18,8 @@ Class extension_importcsv extends Extension
 	}
 	
 	public function fetchNavigation() {
-		if(Administration::instance()->Author->isDeveloper())
-		{
+//		if(Administration::instance()->Author->isDeveloper())
+//		{
 			return array(
 				array(
 					'location'	=> __('System'),
@@ -27,7 +27,7 @@ Class extension_importcsv extends Extension
 					'link'		=> '/'
 				)
 			);
-		}
+//		}
 	}
 
     public function update()
