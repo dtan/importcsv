@@ -90,11 +90,11 @@ class ImportDriver_addresslocation extends ImportDriver_default {
         }
         Symphony::Log()->writeToLog('got all values');
         $result = array(
-            'street' => $value['street'],
-            'city' => $value['city'],
-            'region' => $value['region'],
-            'postal_code' => $value['postal_code'],
-            'country' => $value['country'],
+            'street' => trim($value['street']),
+            'city' => trim($value['city']),
+            'region' => trim($value['region']),
+            'postal_code' => trim($value['postal_code']),
+            'country' => trim($value['country']),
         );
 
         $data = $this->field->processRawFieldData($result, $this->field->__OK__, $message, false, $entry_id);
