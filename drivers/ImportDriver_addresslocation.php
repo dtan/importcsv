@@ -1,4 +1,3 @@
-
 <?php
 
 class ImportDriver_addresslocation extends ImportDriver_default {
@@ -17,7 +16,6 @@ class ImportDriver_addresslocation extends ImportDriver_default {
     public function ImportDriver_addresslocation()
     {
         $this->type = 'addresslocation';
-        Symphony::Log()->writeToLog('++++ address LOCATION importcsv driver ++++');
     }
 
     /**
@@ -80,15 +78,12 @@ class ImportDriver_addresslocation extends ImportDriver_default {
     {
         $message = '';
 
-        Symphony::Log()->writeToLog(__CLASS__ . ' :: ' . implode(', ', array_map(function ($v, $k) { return $k . '=' . $v; }, $value, array_keys($value))));
-
         if (!$value['street'] || !$value['city'] || !$value['region'] || !$value['postal_code'] || !$value['country']) {
             // for the map location field, this value needs to come in as an array of two data points: [latitude, longitude]
             // so if it's not an array yet, return the latitude value first (must come in this order)
-//            Symphony::Log()->writeToLog("value is not an array: ", $value);
+            // Symphony::Log()->writeToLog("value is not an array: ", $value);
             return $value;
         }
-        Symphony::Log()->writeToLog('got all values');
         $result = array(
             'street' => trim($value['street']),
             'city' => trim($value['city']),
