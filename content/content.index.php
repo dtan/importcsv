@@ -19,6 +19,7 @@ class contentExtensionImportcsvIndex extends AdministrationPage
 */
 
     private static $IS_DEVELOPER;
+    private static $TMP_DIR;
 
     public function build()
     {
@@ -34,6 +35,13 @@ class contentExtensionImportcsvIndex extends AdministrationPage
     public function view()
     {
         self::$IS_DEVELOPER = Administration::instance()->Author->isDeveloper();
+        self::$TMP_DIR = EXTENSIONS . '/importcsv/tmp';
+        if (is_dir(self::$TMP_DIR)) {
+            $files = scandir(self::$TMP_DIR);
+            foreach($files as $file) {
+                @unlink($file);
+            }
+        }
         if (isset($_POST['import-step-2']) && $_FILES['csv-file']['name'] != '') {
             // Import step 2:
             $this->__importStep2Page();
@@ -122,7 +130,7 @@ class contentExtensionImportcsvIndex extends AdministrationPage
         }
     }
 
-    private function __importStep2Page()
+    private function __getCachedCSVData()
     {
         // Store the CSV data in the cache table, so the CSV file will not be stored on the server
         $cache = new Cacheable(Symphony::Database());
@@ -130,11 +138,32 @@ class contentExtensionImportcsvIndex extends AdministrationPage
         $csv = new parseCSV();
         $csv->auto($_FILES['csv-file']['tmp_name']);
         $cache->write('importcsv', serialize($csv), 60 * 60 * 24); // Store for one day
+        return $csv;
+    }
+
+    private function __getBasePageXML($sectionID)
+    {
+        return new XMLElement('data', null, array('section-id' => $sectionID));
+    }
+
+    private function __generateExtPage($xml, $template)
+    {
+        // Generate the HTML:
+        $xslt = new XSLTPage();
+        $xslt->setXML($xml->generate());
+        $xslt->setXSL($template, true);
+        $this->Form->setValue($xslt->generate());
+    }
+
+    private function __importStep2Page()
+    {
+        $csv = $this->__getCachedCSVData();
 
         $sectionID = $_POST['section'];
 
         // Generate the XML:
-        $xml = new XMLElement('data', null, array('section-id' => $sectionID));
+        // $xml = new XMLElement('data', null, array('section-id' => $sectionID));
+        $xml = $this->__getBasePageXML($sectionID);
 
         // Get the fields of this section:
         $fieldsNode = new XMLElement('fields');
@@ -154,13 +183,8 @@ class contentExtensionImportcsvIndex extends AdministrationPage
         }
         $xml->appendChild($csvNode);
 
-        // Generate the HTML:
-        $xslt = new XSLTPage();
-        $xslt->setXML($xml->generate());
-        $xslt->setXSL(EXTENSIONS . '/importcsv/content/step2.xsl', true);
-        $this->Form->setValue($xslt->generate());
+        $this->__generateExtPage($xml, EXTENSIONS . '/importcsv/content/step2.xsl');
     }
-
 
     private function __addVar($name, $value)
     {
@@ -173,11 +197,6 @@ class contentExtensionImportcsvIndex extends AdministrationPage
         $sectionID = $_POST['section'];
         $uniqueAction = $_POST['unique-action'];
         $uniqueField = $_POST['unique-field'];
-        $countNew = 0;
-        $countUpdated = 0;
-        $countIgnored = 0;
-        $countOverwritten = 0;
-        $fm = new FieldManager($this);
         $csv = $this->__getCSV();
 
         // Load the information to start the importing process:
@@ -417,20 +436,15 @@ class contentExtensionImportcsvIndex extends AdministrationPage
         $sm = new SectionManager($this);
         $em = new EntryManager($this);
         $section = $sm->fetch($sectionID);
-        $fileName = $section->get('handle') . '_' . date('Y-m-d') . '.csv';
+        $fileNameBase = $section->get('handle');
+        $fileName =  $fileNameBase  . '_' . date('Y-m-d') . '_' . date('U') . '.csv';
         $fields = $section->fetchFields();
 
-        $headers = array();
+        $cvsHeaders = array();
         foreach ($fields as $field)
         {
-            $headers[] = '"' . str_replace('"', '""', $field->get('label')) . '"';
+            $cvsHeaders[] = '"' . str_replace('"', '""', $field->get('label')) . '"';
         }
-
-        header('Content-type: text/csv');
-        header('Content-Disposition: attachment; filename="' . $fileName . '"');
-
-        // Show the headers:
-        echo implode(';', $headers) . "\n";
 
          /*
          * Enable filtering!
@@ -476,8 +490,8 @@ class contentExtensionImportcsvIndex extends AdministrationPage
 
         // Show the content:
         $total = $em->fetchCount($sectionID,$where,$joins);
+        $output = implode(';', $cvsHeaders) . "\r\n";
         for($offset = 0; $offset < $total; $offset += 100)
-
         {
             $entries = $em->fetch(null, $sectionID, 100, $offset, $where, $joins);
             foreach ($entries as $entry)
@@ -496,10 +510,38 @@ class contentExtensionImportcsvIndex extends AdministrationPage
                     }
                     $line[] = '"' . str_replace('"', '""', trim($value)) . '"';
                 }
-                echo implode(';', $line) . "\r\n";
+                // echo implode(';', $line) . "\r\n";
+                $output .= implode(';', $line) . "\r\n";
             }
         }
-        die();
+
+        $output_file = EXTENSIONS . '/importcsv/tmp/' . $fileName;
+        if (!is_dir(self::$TMP_DIR)) {
+            mkdir(self::$TMP_DIR, 0775);
+        }
+        if (!is_file($output_file)) {
+            file_put_contents($output_file, '');
+        }
+        file_put_contents($output_file, $output);
+        $this->__exportPageLink(DOMAIN_PATH . '/extensions/importcsv/tmp/' . $fileName, $fileNameBase);
+    }
+
+    private function __exportPageLink($filePath='', $fileName='') {
+        if ($filePath && $fileName) {
+
+            $sectionID = $_POST['section'];
+
+            // Generate the XML:
+            $xml = new XMLElement('data', null, array('section-id' => $sectionID));
+
+            $csvNode = new XMLElement('csv');
+            $csvNode->appendChild(new XMLElement('name', $fileName));
+            $csvNode->appendChild(new XMLElement('link', $filePath));
+            $csvNode->appendChild(new XMLElement('home-link', DOMAIN_PATH . '/symphony/extension/importcsv/'));
+            $xml->appendChild($csvNode);
+
+            $this->__generateExtPage($xml, EXTENSIONS . '/importcsv/content/export-page.xsl');
+        }
     }
 
     private function __exportMultiLanguage()
